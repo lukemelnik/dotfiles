@@ -1,0 +1,36 @@
+font-family = JetBrainsMonoNL Nerd Font   
+font-size = 12 
+font-family-bold = JetBrainsMonoNL Bold Nerd Font   
+font-family-italic = JetBrainsMonoNL Italic Nerd Font   
+font-family-bold-italic = JetBrainsMonoNL Bold Italic Nerd Font
+
+theme = TokyoNight Night 
+mouse-hide-while-typing = true
+mouse-scroll-multiplier = 2
+
+background-opacity = 1
+background-blur-radius = 20  
+#background = #000000
+background-image = ~/Desktop/vapor.jpg
+background-image-opacity = 0.2
+background-image-fit = cover
+
+window-padding-balance = true
+window-save-state = always
+window-padding-x = 10
+window-padding-y = 10
+window-padding-balance = true
+#adjust-cell-height = 35%
+window-theme = ghostty
+
+macos-titlebar-style = hidden
+macos-option-as-alt = right   
+confirm-close-surface = false
+auto-update = check
+
+keybind = super+i=inspector:toggle
+
+clipboard-read = allow
+clipboard-write = allow
+
+copy-on-select = true
