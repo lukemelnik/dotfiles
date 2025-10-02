@@ -11,8 +11,8 @@ return {
       enabled = true,
       doc = {
         enabled = true,
-        inline = true,
-        float = false,
+        inline = false,
+        float = true,
       },
     },
     picker = {
