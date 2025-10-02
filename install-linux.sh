@@ -36,7 +36,6 @@ if [ "$PKG_MANAGER" = "apt" ]; then
         gpg \
         stow \
         tmux \
-        neovim \
         fzf \
         ripgrep \
         fd-find \
@@ -61,7 +60,6 @@ elif [ "$PKG_MANAGER" = "dnf" ]; then
         wget \
         stow \
         tmux \
-        neovim \
         fzf \
         ripgrep \
         fd-find \
@@ -74,6 +72,20 @@ elif [ "$PKG_MANAGER" = "dnf" ]; then
         gcc \
         gcc-c++ \
         make
+fi
+
+# Install latest Neovim (apt version is too old for LazyVim)
+if ! command -v nvim &> /dev/null || [[ $(nvim --version | head -n1 | grep -oP '\d+\.\d+' | head -n1) < "0.9" ]]; then
+    echo -e "${BLUE}Installing latest Neovim...${NC}"
+    curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
+    sudo rm -rf /opt/nvim-linux-x86_64
+    sudo tar -C /opt -xzf nvim-linux-x86_64.tar.gz
+    rm nvim-linux-x86_64.tar.gz
+
+    # Add to PATH in zshrc if not already there
+    if ! grep -q '/opt/nvim-linux-x86_64/bin' ~/.zshrc 2>/dev/null; then
+        echo 'export PATH="$PATH:/opt/nvim-linux-x86_64/bin"' >> ~/.zshrc
+    fi
 fi
 
 # Install eza
