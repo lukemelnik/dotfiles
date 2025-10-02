@@ -39,14 +39,10 @@ alias ac='nvim ~/.config'
 alias cd='z'
 alias tns="tmux new-session -s"
 
-# Enable colors for ls, only need if not using eza
-# export CLICOLOR=1
-# export LSCOLORS=exfxcxdxbxegedabagacad
-# alias ls='ls -G'
-alias ls="eza --icons"
-alias lsl="eza --long"
-alias lst="eza --tree"
-alias lso="eza --oneline --icons --hyperlink"
+alias le="eza --icons -a"
+alias lt="eza --tree"
+alias ll="eza --long"
+alias leo="eza --oneline --icons --hyperlink"
 
 # ---------------------------
 # Functions
