@@ -156,7 +156,7 @@ stow .config
 # Install tmux plugins non-interactively
 if [ -f "$HOME/.tmux/plugins/tpm/bin/install_plugins" ]; then
     echo -e "${BLUE}Installing tmux plugins...${NC}"
-    ~/.tmux/plugins/tpm/bin/install_plugins
+    ~/.tmux/plugins/tpm/bin/install_plugins || echo "Skipping tmux plugins (run manually in tmux with prefix + I)"
 fi
 
 # Add ~/.local/bin to PATH if not already there
