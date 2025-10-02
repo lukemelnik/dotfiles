@@ -11,11 +11,6 @@ return {
       ["<C-k>"] = { "select_prev", "fallback" },
       ["<CR>"] = { "accept", "fallback" },
     },
-    accept = {
-      auto_brackets = {
-        enabled = true,
-      },
-    },
     sources = {
       default = { "emoji", "dadbod" },
       providers = {
