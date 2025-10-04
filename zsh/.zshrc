@@ -23,6 +23,23 @@ if [ -f /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh 
     source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 fi
 
+# ---------------------------
+# Autosuggestions keybindings
+# ---------------------------
+
+# Accept the whole suggestion with Ctrl-F
+bindkey -M viins '^F' autosuggest-accept
+
+# Accept a single word with Ctrl-W
+bindkey -M viins '^W' autosuggest-accept-word
+
+
+# ---------------------------
+# Force claude to use bash so it doesn't error with zoxide alias
+# ---------------------------
+claude() {
+  SHELL=/bin/bash command claude "$@"
+}
 
 # ---------------------------
 # Aliases
