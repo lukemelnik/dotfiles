@@ -75,6 +75,8 @@ alias lt="eza --tree"
 alias ll="eza --long"
 alias leo="eza --oneline --icons --hyperlink"
 
+alias gwl="git worktree list"
+
 # ---------------------------
 # Functions
 # ---------------------------
@@ -97,24 +99,27 @@ wt-new() {
 
   echo "▶ Creating new worktree for branch: $BRANCH"
 
+  # Require branch name
   if [ -z "$BRANCH" ]; then
     echo "✖ Error: branch name required"
     return 1
   fi
 
+  # Ensure inside a Git repo
   if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "✖ Error: not inside a git repository"
     return 1
   fi
 
+  # Ensure we are in the primary repo, not another worktree
   if [ -f .git ] && grep -q "gitdir:" .git; then
-    echo "✖ Error: cannot run wt-new from a linked worktree"
+    echo "✖ Error: cannot run wt-new from a linked worktree. Run it from the main repo."
     return 1
   fi
 
-  echo "• Fetching remote branches..."
+  echo "• Fetching latest remote refs..."
   git fetch --all --prune --quiet
-  echo "✔ Done fetching"
+  echo "✔ Remote refs updated"
 
   local ROOT_DIR
   ROOT_DIR="$(git rev-parse --show-toplevel)"
@@ -122,23 +127,49 @@ wt-new() {
   REPO_NAME="$(basename "$ROOT_DIR")"
   local WT_DIR="../${REPO_NAME}-${BRANCH}"
 
+  # Ensure no conflicting directory already exists
   if [ -e "$WT_DIR" ]; then
     echo "✖ Error: worktree directory already exists: $WT_DIR"
     return 1
   fi
 
-  echo "• Creating worktree at $WT_DIR"
-  git worktree add -b "$BRANCH" "$WT_DIR" origin/main
-  echo "✔ Worktree created"
+  echo "• Checking if branch '$BRANCH' exists locally..."
+  if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
+    echo "ℹ Local branch exists"
 
-  echo "• Switching into worktree directory"
+    # Check if it's active in another worktree
+    if git worktree list | grep -q "$BRANCH"; then
+      echo "✖ Branch '$BRANCH' is already checked out in another worktree"
+      return 1
+    fi
+
+    echo "• Creating worktree from existing local branch"
+    git worktree add "$WT_DIR" "$BRANCH"
+
+  else
+    echo "• Local branch not found. Checking remote..."
+    if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+      echo "ℹ Remote branch exists — creating local tracking branch"
+      git worktree add -b "$BRANCH" "$WT_DIR" "origin/$BRANCH"
+    else
+      echo "ℹ Branch does not exist anywhere — creating new branch from origin/main"
+      git worktree add -b "$BRANCH" "$WT_DIR" origin/main
+    fi
+  fi
+
+  echo "• Switching into new worktree directory"
   cd "$WT_DIR" || exit
 
-  echo "• Creating & tracking remote branch origin/$BRANCH"
-  git push --set-upstream --quiet origin "$BRANCH"
-  echo "✔ Upstream tracking established"
+  echo "• Ensuring upstream relationship with remote"
+  if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+    echo "ℹ Remote already exists — upstream assumed established"
+  else
+    git push --set-upstream --quiet origin "$BRANCH"
+    echo "✔ Remote branch created & tracking set"
+  fi
 
-  echo "🎉 Ready to work in branch '$BRANCH' at: $WT_DIR"
+  echo "🎉 Worktree ready at: $WT_DIR"
+  echo "🎉 On branch: $BRANCH"
 }
 # Remove worktree and delete branch
 
@@ -165,26 +196,26 @@ wt-done() {
 
   echo "• Removing worktree at $WT_DIR"
   git worktree remove "$WT_DIR"
-  echo "✔ Worktree removed"
+  echo "✔ Worktree directory removed"
 
-  echo "• Deleting local branch $BRANCH"
+  echo "• Deleting local branch '$BRANCH'"
   git branch -D "$BRANCH"
   echo "✔ Local branch deleted"
 
-  echo "• Checking if remote branch exists..."
+  echo "• Checking whether remote branch exists..."
   if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
-    echo "• Remote exists — deleting origin/$BRANCH"
+    echo "• Remote branch found — deleting origin/$BRANCH"
     git push origin --delete "$BRANCH" --quiet
     echo "✔ Remote branch deleted"
   else
-    echo "ℹ No remote branch exists — nothing to delete"
+    echo "ℹ No remote branch to delete"
   fi
 
-  echo "• Pruning stale worktree refs"
+  echo "• Pruning stale worktree references"
   git worktree prune
-  echo "✔ Done pruning"
+  echo "✔ Completed pruning"
 
-  echo "🎉 Cleanup complete!"
+  echo "🎉 Cleanup complete for branch '$BRANCH'"
 }
 
 # ---------------------------
