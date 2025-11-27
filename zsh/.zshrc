@@ -91,29 +91,30 @@ function y() {
 # --------------------------
 
 # Create new worktree w/ branch name, set upstream on remote 
-#
+
 wt-new() {
   local BRANCH="$1"
 
-  # require branch name
+  echo "▶ Creating new worktree for branch: $BRANCH"
+
   if [ -z "$BRANCH" ]; then
-    echo "Error: branch name required"
+    echo "✖ Error: branch name required"
     return 1
   fi
 
-  # ensure in a git repo
   if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    echo "Error: not inside a git repository"
+    echo "✖ Error: not inside a git repository"
     return 1
   fi
 
-  # ensure in primary repo, not a linked worktree
   if [ -f .git ] && grep -q "gitdir:" .git; then
-    echo "Error: cannot run wt-new from a linked worktree"
+    echo "✖ Error: cannot run wt-new from a linked worktree"
     return 1
   fi
 
+  echo "• Fetching remote branches..."
   git fetch --all --prune --quiet
+  echo "✔ Done fetching"
 
   local ROOT_DIR
   ROOT_DIR="$(git rev-parse --show-toplevel)"
@@ -121,51 +122,69 @@ wt-new() {
   REPO_NAME="$(basename "$ROOT_DIR")"
   local WT_DIR="../${REPO_NAME}-${BRANCH}"
 
-  # ensure no existing worktree dir
   if [ -e "$WT_DIR" ]; then
-    echo "Error: worktree directory already exists: $WT_DIR"
+    echo "✖ Error: worktree directory already exists: $WT_DIR"
     return 1
   fi
 
-  # create worktree and branch based on origin/main
+  echo "• Creating worktree at $WT_DIR"
   git worktree add -b "$BRANCH" "$WT_DIR" origin/main
+  echo "✔ Worktree created"
 
-  # switch into worktree
+  echo "• Switching into worktree directory"
   cd "$WT_DIR" || exit
 
-  # automatically create remote branch + tracking
+  echo "• Creating & tracking remote branch origin/$BRANCH"
   git push --set-upstream --quiet origin "$BRANCH"
+  echo "✔ Upstream tracking established"
 
-  echo "✔ Worktree created at $WT_DIR"
-  echo "✔ Branch '$BRANCH' now tracks 'origin/$BRANCH'"
-  echo "✔ You are now inside the new worktree"
+  echo "🎉 Ready to work in branch '$BRANCH' at: $WT_DIR"
 }
 # Remove worktree and delete branch
+
 wt-done() {
   local BRANCH="$1"
 
+  echo "▶ Cleaning up worktree + branch: $BRANCH"
+
   if [ -z "$BRANCH" ]; then
-    echo "Error: branch name required"
+    echo "✖ Error: branch name required"
     return 1
   fi
 
   local ROOT_DIR
-  ROOT_DIR=$(git rev-parse --show-toplevel)
+  ROOT_DIR="$(git rev-parse --show-toplevel)"
   local REPO_NAME
-  REPO_NAME=$(basename "$ROOT_DIR")
+  REPO_NAME="$(basename "$ROOT_DIR")"
   local WT_DIR="../${REPO_NAME}-${BRANCH}"
 
-  # Ensure the worktree directory exists
   if [ ! -d "$WT_DIR" ]; then
-    echo "Error: worktree directory $WT_DIR not found"
+    echo "✖ Error: worktree directory not found: $WT_DIR"
     return 1
   fi
 
+  echo "• Removing worktree at $WT_DIR"
   git worktree remove "$WT_DIR"
+  echo "✔ Worktree removed"
+
+  echo "• Deleting local branch $BRANCH"
   git branch -D "$BRANCH"
-  git push origin --delete "$BRANCH"
+  echo "✔ Local branch deleted"
+
+  echo "• Checking if remote branch exists..."
+  if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+    echo "• Remote exists — deleting origin/$BRANCH"
+    git push origin --delete "$BRANCH" --quiet
+    echo "✔ Remote branch deleted"
+  else
+    echo "ℹ No remote branch exists — nothing to delete"
+  fi
+
+  echo "• Pruning stale worktree refs"
   git worktree prune
-  echo "✔ Removed $WT_DIR and branch $BRANCH"
+  echo "✔ Done pruning"
+
+  echo "🎉 Cleanup complete!"
 }
 
 # ---------------------------
