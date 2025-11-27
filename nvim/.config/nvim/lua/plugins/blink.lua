@@ -9,8 +9,11 @@ return {
       preset = "default",
       ["<C-j>"] = { "select_next", "fallback" },
       ["<C-k>"] = { "select_prev", "fallback" },
-      ["<CR>"] = { "accept", "fallback" },
     },
+    cmdline = { enabled = true },
+    -- enabled = function()
+    --   return not vim.tbl_contains({ "markdown" }, vim.bo.filetype)
+    -- end,
     sources = {
       default = { "emoji", "dadbod" },
       providers = {
