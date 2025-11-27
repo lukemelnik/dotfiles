@@ -75,7 +75,7 @@ alias lt="eza --tree"
 alias ll="eza --long"
 alias leo="eza --oneline --icons --hyperlink"
 
-alias gwl="git worktree list"
+alias wtl="git worktree list"
 
 # ---------------------------
 # Functions
@@ -94,7 +94,7 @@ function y() {
 
 # Create new worktree w/ branch name, set upstream on remote 
 
-wt-new() {
+wtn() {
   local BRANCH="$1"
 
   echo "▶ Creating new worktree for branch: $BRANCH"
@@ -113,19 +113,26 @@ wt-new() {
 
   # Ensure we are in the primary repo, not another worktree
   if [ -f .git ] && grep -q "gitdir:" .git; then
-    echo "✖ Error: cannot run wt-new from a linked worktree. Run it from the main repo."
+    echo "✖ Error: cannot run wtn from a linked worktree. Run it from the main repo."
     return 1
   fi
 
   echo "• Fetching latest remote refs..."
-  git fetch --all --prune --quiet
+  if ! git fetch --all --prune --quiet; then
+    echo "✖ Error: failed to fetch remote refs"
+    return 1
+  fi
   echo "✔ Remote refs updated"
 
+  # Determine repo name and safe directory name
   local ROOT_DIR
   ROOT_DIR="$(git rev-parse --show-toplevel)"
+
   local REPO_NAME
   REPO_NAME="$(basename "$ROOT_DIR")"
-  local WT_DIR="../${REPO_NAME}-${BRANCH}"
+
+  local SAFE_BRANCH="${BRANCH//\//-}"
+  local WT_DIR="../${REPO_NAME}-${SAFE_BRANCH}"
 
   # Ensure no conflicting directory already exists
   if [ -e "$WT_DIR" ]; then
@@ -144,16 +151,25 @@ wt-new() {
     fi
 
     echo "• Creating worktree from existing local branch"
-    git worktree add "$WT_DIR" "$BRANCH"
+    if ! git worktree add "$WT_DIR" "$BRANCH"; then
+      echo "✖ Error: failed to create worktree"
+      return 1
+    fi
 
   else
     echo "• Local branch not found. Checking remote..."
     if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
       echo "ℹ Remote branch exists — creating local tracking branch"
-      git worktree add -b "$BRANCH" "$WT_DIR" "origin/$BRANCH"
+      if ! git worktree add -b "$BRANCH" "$WT_DIR" "origin/$BRANCH"; then
+        echo "✖ Error: failed to create worktree from remote branch"
+        return 1
+      fi
     else
       echo "ℹ Branch does not exist anywhere — creating new branch from origin/main"
-      git worktree add -b "$BRANCH" "$WT_DIR" origin/main
+      if ! git worktree add -b "$BRANCH" "$WT_DIR" origin/main; then
+        echo "✖ Error: failed to create worktree with new branch"
+        return 1
+      fi
     fi
   fi
 
@@ -161,11 +177,15 @@ wt-new() {
   cd "$WT_DIR" || exit
 
   echo "• Ensuring upstream relationship with remote"
-  if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
-    echo "ℹ Remote already exists — upstream assumed established"
+  # Check if branch already has upstream configured
+  if git rev-parse --abbrev-ref --symbolic-full-name @{u} >/dev/null 2>&1; then
+    echo "ℹ Upstream already configured"
   else
-    git push --set-upstream --quiet origin "$BRANCH"
-    echo "✔ Remote branch created & tracking set"
+    if ! git push --set-upstream --quiet origin "$BRANCH"; then
+      echo "⚠ Warning: failed to set upstream (you may need to push manually)"
+    else
+      echo "✔ Remote branch created & tracking set"
+    fi
   fi
 
   echo "🎉 Worktree ready at: $WT_DIR"
@@ -173,49 +193,169 @@ wt-new() {
 }
 # Remove worktree and delete branch
 
-wt-done() {
-  local BRANCH="$1"
+wtd() {
+  local BRANCH=""
+  local FORCE=""
+
+  # Parse arguments to handle --force flag
+  for arg in "$@"; do
+    if [ "$arg" = "--force" ]; then
+      FORCE="--force"
+    else
+      BRANCH="$arg"
+    fi
+  done
+
+  # If no branch provided, use fzf to select from worktrees
+  if [ -z "$BRANCH" ]; then
+    echo "▶ Selecting worktree to delete..."
+    local SELECTION
+    SELECTION=$(git worktree list | grep -v "(bare)" | fzf --prompt="Delete worktree > " --height=40%)
+
+    if [ -z "$SELECTION" ]; then
+      echo "✖ No selection made"
+      return 1
+    fi
+
+    # Extract branch name from worktree list output
+    BRANCH=$(echo "$SELECTION" | awk '{print $NF}' | sed 's/^\[//' | sed 's/\]$//')
+    echo "• Selected branch: $BRANCH"
+  fi
 
   echo "▶ Cleaning up worktree + branch: $BRANCH"
 
-  if [ -z "$BRANCH" ]; then
-    echo "✖ Error: branch name required"
+  # Ensure we are in the primary repo, not a worktree
+  if [ -f .git ] && grep -q "gitdir:" .git; then
+    echo "✖ Error: cannot run wtd from a linked worktree. Run it from the main repo."
     return 1
   fi
 
+  # Check if worktree exists first before doing expensive operations
   local ROOT_DIR
-  ROOT_DIR="$(git rev-parse --show-toplevel)"
+  ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null)"
+  if [ -z "$ROOT_DIR" ]; then
+    echo "✖ Error: not inside a git repository"
+    return 1
+  fi
+
   local REPO_NAME
   REPO_NAME="$(basename "$ROOT_DIR")"
-  local WT_DIR="../${REPO_NAME}-${BRANCH}"
+  local SAFE_BRANCH="${BRANCH//\//-}"
+  local WT_DIR="../${REPO_NAME}-${SAFE_BRANCH}"
 
   if [ ! -d "$WT_DIR" ]; then
     echo "✖ Error: worktree directory not found: $WT_DIR"
+    echo "ℹ Available worktrees:"
+    git worktree list
     return 1
   fi
 
-  echo "• Removing worktree at $WT_DIR"
-  git worktree remove "$WT_DIR"
-  echo "✔ Worktree directory removed"
+  # Fetch latest origin/main to ensure accurate merge check
+  echo "• Fetching latest origin/main..."
+  if ! git fetch origin main:refs/remotes/origin/main --quiet 2>/dev/null; then
+    echo "⚠ Warning: failed to fetch origin/main, merge check may be stale"
+  fi
 
-  echo "• Deleting local branch '$BRANCH'"
-  git branch -D "$BRANCH"
-  echo "✔ Local branch deleted"
+  # Check if branch has been merged using GitHub PR status (handles squash merges)
+  echo "• Checking PR merge status..."
+  local PR_STATE=""
+  local OPEN_PR=""
+  if command -v gh >/dev/null 2>&1; then
+    PR_STATE=$(gh pr list --head "$BRANCH" --state merged --json state --jq '.[0].state' 2>/dev/null)
+    OPEN_PR=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number' 2>/dev/null)
+
+    if [ "$PR_STATE" = "MERGED" ]; then
+      echo "✓ PR for branch '$BRANCH' has been merged"
+    elif [ -n "$OPEN_PR" ] && [ "$OPEN_PR" != "null" ]; then
+      if [ "$FORCE" != "--force" ]; then
+        echo "✖ Branch '$BRANCH' has an open PR (#$OPEN_PR) that hasn't been merged yet."
+        echo "✖ Merge the PR first or run: wtd $BRANCH --force"
+        return 1
+      fi
+      echo "⚠ Force deleting branch with open PR (#$OPEN_PR)"
+    else
+      # No PR found, fall back to commit-based check
+      echo "ℹ No PR found for branch '$BRANCH'"
+      if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
+        if ! git merge-base --is-ancestor "refs/heads/$BRANCH" origin/main 2>/dev/null; then
+          if [ "$FORCE" != "--force" ]; then
+            echo "✖ Branch '$BRANCH' has unmerged commits."
+            echo "✖ Create/merge a PR or run: wtd $BRANCH --force"
+            return 1
+          fi
+          echo "⚠ Force deleting unmerged branch"
+        else
+          echo "✓ Branch commits are in origin/main"
+        fi
+      fi
+    fi
+  else
+    echo "ℹ GitHub CLI not available, skipping PR check"
+    # Fall back to commit-based check
+    if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
+      if ! git merge-base --is-ancestor "refs/heads/$BRANCH" origin/main 2>/dev/null; then
+        if [ "$FORCE" != "--force" ]; then
+          echo "✖ Branch '$BRANCH' has unmerged commits."
+          echo "✖ Install 'gh' CLI for PR-based checks or run: wtd $BRANCH --force"
+          return 1
+        fi
+        echo "⚠ Force deleting unmerged branch"
+      fi
+    fi
+  fi
+
+  echo "• Removing worktree at $WT_DIR"
+  if [ "$FORCE" = "--force" ]; then
+    if ! git worktree remove --force "$WT_DIR"; then
+      echo "✖ Error: failed to remove worktree"
+      return 1
+    fi
+  else
+    if ! git worktree remove "$WT_DIR"; then
+      echo "✖ Error: failed to remove worktree"
+      return 1
+    fi
+  fi
+  echo "✔ Worktree removed"
+
+  echo "• Deleting local branch"
+  if ! git branch -D "$BRANCH"; then
+    echo "✖ Error: failed to delete local branch"
+    return 1
+  fi
 
   echo "• Checking whether remote branch exists..."
   if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
-    echo "• Remote branch found — deleting origin/$BRANCH"
-    git push origin --delete "$BRANCH" --quiet
-    echo "✔ Remote branch deleted"
+    echo "• Remote found — deleting origin/$BRANCH"
+    if ! git push origin --delete "$BRANCH" --quiet; then
+      echo "⚠ Warning: failed to delete remote branch (may require manual cleanup)"
+    fi
   else
     echo "ℹ No remote branch to delete"
   fi
 
-  echo "• Pruning stale worktree references"
+  echo "• Pruning stale worktree metadata"
   git worktree prune
-  echo "✔ Completed pruning"
 
-  echo "🎉 Cleanup complete for branch '$BRANCH'"
+  echo "🎉 Cleanup complete for '$BRANCH'"
+}
+
+# Pick worktree with fzf
+#
+wtp() {
+  echo "▶ Selecting worktree..."
+
+  local SELECTION
+  SELECTION=$(git worktree list | fzf --prompt="Worktrees > " | awk '{print $1}')
+
+  if [ -z "$SELECTION" ]; then
+    echo "✖ No selection made"
+    return 1
+  fi
+
+  echo "• Switching to $SELECTION"
+  cd "$SELECTION" || exit
+  echo "🎉 Now in $(pwd)"
 }
 
 # ---------------------------
