@@ -166,7 +166,7 @@ wtn() {
       fi
     else
       echo "ℹ Branch does not exist anywhere — creating new branch from origin/main"
-      if ! git worktree add -b "$BRANCH" "$WT_DIR" origin/main; then
+      if ! git worktree add -b "$BRANCH" "$WT_DIR" --no-track origin/main; then
         echo "✖ Error: failed to create worktree with new branch"
         return 1
       fi
@@ -181,7 +181,7 @@ wtn() {
   if git rev-parse --abbrev-ref --symbolic-full-name @{u} >/dev/null 2>&1; then
     echo "ℹ Upstream already configured"
   else
-    if ! git push --set-upstream --quiet origin "$BRANCH"; then
+    if ! git push --set-upstream origin "$BRANCH"; then
       echo "⚠ Warning: failed to set upstream (you may need to push manually)"
     else
       echo "✔ Remote branch created & tracking set"
