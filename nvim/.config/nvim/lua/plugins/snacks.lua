@@ -19,6 +19,17 @@ return {
       matcher = {
         frecency = true,
       },
+      sources = {
+        explorer = {
+          win = {
+            list = {
+              keys = {
+                ["d"] = "explorer_del",
+              },
+            },
+          },
+        },
+      },
     },
     zen = {
       toggles = {
