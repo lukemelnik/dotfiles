@@ -517,15 +517,6 @@ if [ -d "/Library/PostgreSQL/16/bin" ]; then
     export PATH="/Library/PostgreSQL/16/bin:$PATH"
 fi
 
-# NVM (lazy-loaded for performance)
-export NVM_DIR="$HOME/.nvm"
-nvm() {
-    unset -f nvm
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-    nvm "$@"
-}
-
 # Local binaries
 export PATH="$HOME/.local/bin:$PATH"
 
