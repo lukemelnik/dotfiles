@@ -75,8 +75,6 @@ alias lt="eza --tree"
 alias ll="eza --long"
 alias leo="eza --oneline --icons --hyperlink"
 
-alias wtl="git worktree list"
-
 # ---------------------------
 # Functions
 # ---------------------------
@@ -94,7 +92,7 @@ function y() {
 
 # Create new worktree w/ branch name, set upstream on remote 
 
-wtn() {
+wtc() {
   local BRANCH="$1"
 
   echo "▶ Creating new worktree for branch: $BRANCH"
@@ -342,7 +340,7 @@ wtd() {
 
 # Pick worktree with fzf
 #
-wtp() {
+wtl() {
   echo "▶ Selecting worktree..."
 
   local SELECTION
