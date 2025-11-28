@@ -541,6 +541,12 @@ if command -v zoxide >/dev/null 2>&1; then
 fi
 
 f() {
+  # Check dependency
+  if ! command -v fzf >/dev/null 2>&1; then
+    echo "Error: fzf is not installed. Install it first."
+    return 1
+  fi
+
   local file
   file="$(fzf)" || return 1
   nvim "$file"
