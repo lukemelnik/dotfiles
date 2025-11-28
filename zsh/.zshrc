@@ -189,6 +189,144 @@ wtc() {
   echo "🎉 Worktree ready at: $WT_DIR"
   echo "🎉 On branch: $BRANCH"
 }
+
+# Create new worktree with tmux workspace (nvim + AI CLI)
+wtcai() {
+  local BRANCH=""
+  local AI_CLI="claude"
+
+  # Parse arguments
+  for arg in "$@"; do
+    if [ "$arg" = "--codex" ]; then
+      AI_CLI="codex"
+    elif [ "$arg" = "--claude" ]; then
+      AI_CLI="claude"
+    else
+      BRANCH="$arg"
+    fi
+  done
+
+  # Require branch name
+  if [ -z "$BRANCH" ]; then
+    echo "✖ Error: branch name required"
+    echo "Usage: wtcai <branch-name> [--codex|--claude]"
+    return 1
+  fi
+
+  # Check if we're in a tmux session
+  if [ -z "$TMUX" ]; then
+    echo "✖ Error: must be run inside a tmux session"
+    return 1
+  fi
+
+  echo "▶ Creating new worktree for branch: $BRANCH"
+
+  # Ensure inside a Git repo
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "✖ Error: not inside a git repository"
+    return 1
+  fi
+
+  # Ensure we are in the primary repo, not another worktree
+  if [ -f .git ] && grep -q "gitdir:" .git; then
+    echo "✖ Error: cannot run wtcai from a linked worktree. Run it from the main repo."
+    return 1
+  fi
+
+  echo "• Fetching latest remote refs..."
+  if ! git fetch --all --prune --quiet; then
+    echo "✖ Error: failed to fetch remote refs"
+    return 1
+  fi
+  echo "✔ Remote refs updated"
+
+  # Determine repo name and safe directory name
+  local ROOT_DIR
+  ROOT_DIR="$(git rev-parse --show-toplevel)"
+
+  local REPO_NAME
+  REPO_NAME="$(basename "$ROOT_DIR")"
+
+  local SAFE_BRANCH="${BRANCH//\//-}"
+  local WT_DIR="../${REPO_NAME}-${SAFE_BRANCH}"
+
+  # Ensure no conflicting directory already exists
+  if [ -e "$WT_DIR" ]; then
+    echo "✖ Error: worktree directory already exists: $WT_DIR"
+    return 1
+  fi
+
+  echo "• Checking if branch '$BRANCH' exists locally..."
+  if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
+    echo "ℹ Local branch exists"
+
+    # Check if it's active in another worktree
+    if git worktree list | grep -q "$BRANCH"; then
+      echo "✖ Branch '$BRANCH' is already checked out in another worktree"
+      return 1
+    fi
+
+    echo "• Creating worktree from existing local branch"
+    if ! git worktree add "$WT_DIR" "$BRANCH"; then
+      echo "✖ Error: failed to create worktree"
+      return 1
+    fi
+
+  else
+    echo "• Local branch not found. Checking remote..."
+    if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+      echo "ℹ Remote branch exists — creating local tracking branch"
+      if ! git worktree add -b "$BRANCH" "$WT_DIR" "origin/$BRANCH"; then
+        echo "✖ Error: failed to create worktree from remote branch"
+        return 1
+      fi
+    else
+      echo "ℹ Branch does not exist anywhere — creating new branch from origin/main"
+      if ! git worktree add -b "$BRANCH" "$WT_DIR" --no-track origin/main; then
+        echo "✖ Error: failed to create worktree with new branch"
+        return 1
+      fi
+    fi
+  fi
+
+  # Set upstream if needed (don't cd yet, we'll do it in tmux)
+  echo "• Ensuring upstream relationship with remote"
+  (
+    cd "$WT_DIR" || exit
+    if git rev-parse --abbrev-ref --symbolic-full-name @{u} >/dev/null 2>&1; then
+      echo "ℹ Upstream already configured"
+    else
+      if ! git push --set-upstream origin "$BRANCH"; then
+        echo "⚠ Warning: failed to set upstream (you may need to push manually)"
+      else
+        echo "✔ Remote branch created & tracking set"
+      fi
+    fi
+  )
+
+  # Create tmux window and set up workspace
+  echo "• Creating tmux workspace..."
+
+  # Get absolute path for the worktree
+  local ABS_WT_DIR
+  ABS_WT_DIR="$(cd "$WT_DIR" && pwd)"
+
+  # Create new window with branch name and start nvim in it
+  tmux new-window -n "$BRANCH" -c "$ABS_WT_DIR" "nvim"
+
+  # Split window vertically (left/right) - this creates the right pane
+  tmux split-window -h -c "$ABS_WT_DIR"
+
+  # Send AI CLI to the newly created right pane
+  tmux send-keys "$AI_CLI" C-m
+
+  # Focus back on the left pane (nvim)
+  tmux select-pane -L
+
+  echo "🎉 Worktree ready at: $ABS_WT_DIR"
+  echo "🎉 Tmux window '$BRANCH' created with nvim (left) + $AI_CLI (right)"
+}
+
 # Remove worktree and delete branch
 
 wtd() {
@@ -222,24 +360,28 @@ wtd() {
 
   echo "▶ Cleaning up worktree + branch: $BRANCH"
 
-  # Ensure we are in the primary repo, not a worktree
-  if [ -f .git ] && grep -q "gitdir:" .git; then
-    echo "✖ Error: cannot run wtd from a linked worktree. Run it from the main repo."
+  # Find the main repository directory (works from anywhere - main repo or worktree)
+  local COMMON_DIR
+  COMMON_DIR="$(git rev-parse --git-common-dir 2>/dev/null)"
+  if [ -z "$COMMON_DIR" ]; then
+    echo "✖ Error: not inside a git repository"
     return 1
   fi
 
-  # Check if worktree exists first before doing expensive operations
+  # Get the main repo root directory
   local ROOT_DIR
-  ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null)"
-  if [ -z "$ROOT_DIR" ]; then
-    echo "✖ Error: not inside a git repository"
-    return 1
+  if [[ "$COMMON_DIR" == *"/.git/worktrees/"* ]]; then
+    # We're in a worktree, get the main repo location
+    ROOT_DIR="$(dirname "$COMMON_DIR")"
+  else
+    # We're in the main repo
+    ROOT_DIR="$(dirname "$COMMON_DIR")"
   fi
 
   local REPO_NAME
   REPO_NAME="$(basename "$ROOT_DIR")"
   local SAFE_BRANCH="${BRANCH//\//-}"
-  local WT_DIR="../${REPO_NAME}-${SAFE_BRANCH}"
+  local WT_DIR="$ROOT_DIR/../${REPO_NAME}-${SAFE_BRANCH}"
 
   if [ ! -d "$WT_DIR" ]; then
     echo "✖ Error: worktree directory not found: $WT_DIR"
