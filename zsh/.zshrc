@@ -360,39 +360,34 @@ wtd() {
 
   echo "▶ Cleaning up worktree + branch: $BRANCH"
 
-  # Find the main repository directory (works from anywhere - main repo or worktree)
-  local COMMON_DIR
-  COMMON_DIR="$(git rev-parse --git-common-dir 2>/dev/null)"
-  if [ -z "$COMMON_DIR" ]; then
+  # Ensure we're in a git repository
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "✖ Error: not inside a git repository"
     return 1
   fi
 
-  # Get the main repo root directory
-  local ROOT_DIR
-  if [[ "$COMMON_DIR" == *"/.git/worktrees/"* ]]; then
-    # We're in a worktree, get the main repo location
-    ROOT_DIR="$(dirname "$COMMON_DIR")"
-  else
-    # We're in the main repo
-    ROOT_DIR="$(dirname "$COMMON_DIR")"
-  fi
+  # Get the absolute path to the main repository root
+  # This works from both main repo and worktrees
+  local MAIN_REPO
+  MAIN_REPO="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+  MAIN_REPO="$(dirname "$MAIN_REPO")"  # Remove .git from path
 
   local REPO_NAME
-  REPO_NAME="$(basename "$ROOT_DIR")"
+  REPO_NAME="$(basename "$MAIN_REPO")"
+
   local SAFE_BRANCH="${BRANCH//\//-}"
-  local WT_DIR="$ROOT_DIR/../${REPO_NAME}-${SAFE_BRANCH}"
+  local WT_DIR="$(cd "$MAIN_REPO/.." && pwd)/${REPO_NAME}-${SAFE_BRANCH}"
 
   if [ ! -d "$WT_DIR" ]; then
     echo "✖ Error: worktree directory not found: $WT_DIR"
     echo "ℹ Available worktrees:"
-    git worktree list
+    git -C "$MAIN_REPO" worktree list
     return 1
   fi
 
-  # Fetch latest origin/main to ensure accurate merge check
+  # Fetch latest origin/main to ensure accurate merge check (run from main repo)
   echo "• Fetching latest origin/main..."
-  if ! git fetch origin main:refs/remotes/origin/main --quiet 2>/dev/null; then
+  if ! git -C "$MAIN_REPO" fetch origin main:refs/remotes/origin/main --quiet 2>/dev/null; then
     echo "⚠ Warning: failed to fetch origin/main, merge check may be stale"
   fi
 
@@ -401,8 +396,8 @@ wtd() {
   local PR_STATE=""
   local OPEN_PR=""
   if command -v gh >/dev/null 2>&1; then
-    PR_STATE=$(gh pr list --head "$BRANCH" --state merged --json state --jq '.[0].state' 2>/dev/null)
-    OPEN_PR=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number' 2>/dev/null)
+    PR_STATE=$(cd "$MAIN_REPO" && gh pr list --head "$BRANCH" --state merged --json state --jq '.[0].state' 2>/dev/null)
+    OPEN_PR=$(cd "$MAIN_REPO" && gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number' 2>/dev/null)
 
     if [ "$PR_STATE" = "MERGED" ]; then
       echo "✓ PR for branch '$BRANCH' has been merged"
@@ -416,8 +411,8 @@ wtd() {
     else
       # No PR found, fall back to commit-based check
       echo "ℹ No PR found for branch '$BRANCH'"
-      if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
-        if ! git merge-base --is-ancestor "refs/heads/$BRANCH" origin/main 2>/dev/null; then
+      if git -C "$MAIN_REPO" show-ref --verify --quiet "refs/heads/$BRANCH"; then
+        if ! git -C "$MAIN_REPO" merge-base --is-ancestor "refs/heads/$BRANCH" origin/main 2>/dev/null; then
           if [ "$FORCE" != "--force" ]; then
             echo "✖ Branch '$BRANCH' has unmerged commits."
             echo "✖ Create/merge a PR or run: wtd $BRANCH --force"
@@ -432,8 +427,8 @@ wtd() {
   else
     echo "ℹ GitHub CLI not available, skipping PR check"
     # Fall back to commit-based check
-    if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
-      if ! git merge-base --is-ancestor "refs/heads/$BRANCH" origin/main 2>/dev/null; then
+    if git -C "$MAIN_REPO" show-ref --verify --quiet "refs/heads/$BRANCH"; then
+      if ! git -C "$MAIN_REPO" merge-base --is-ancestor "refs/heads/$BRANCH" origin/main 2>/dev/null; then
         if [ "$FORCE" != "--force" ]; then
           echo "✖ Branch '$BRANCH' has unmerged commits."
           echo "✖ Install 'gh' CLI for PR-based checks or run: wtd $BRANCH --force"
@@ -446,12 +441,12 @@ wtd() {
 
   echo "• Removing worktree at $WT_DIR"
   if [ "$FORCE" = "--force" ]; then
-    if ! git worktree remove --force "$WT_DIR"; then
+    if ! git -C "$MAIN_REPO" worktree remove --force "$WT_DIR"; then
       echo "✖ Error: failed to remove worktree"
       return 1
     fi
   else
-    if ! git worktree remove "$WT_DIR"; then
+    if ! git -C "$MAIN_REPO" worktree remove "$WT_DIR"; then
       echo "✖ Error: failed to remove worktree"
       return 1
     fi
@@ -459,15 +454,15 @@ wtd() {
   echo "✔ Worktree removed"
 
   echo "• Deleting local branch"
-  if ! git branch -D "$BRANCH"; then
+  if ! git -C "$MAIN_REPO" branch -D "$BRANCH"; then
     echo "✖ Error: failed to delete local branch"
     return 1
   fi
 
   echo "• Checking whether remote branch exists..."
-  if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+  if git -C "$MAIN_REPO" ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
     echo "• Remote found — deleting origin/$BRANCH"
-    if ! git push origin --delete "$BRANCH" --quiet; then
+    if ! git -C "$MAIN_REPO" push origin --delete "$BRANCH" --quiet; then
       echo "⚠ Warning: failed to delete remote branch (may require manual cleanup)"
     fi
   else
@@ -475,7 +470,7 @@ wtd() {
   fi
 
   echo "• Pruning stale worktree metadata"
-  git worktree prune
+  git -C "$MAIN_REPO" worktree prune
 
   echo "🎉 Cleanup complete for '$BRANCH'"
 }
