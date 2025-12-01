@@ -32,7 +32,17 @@ mv ~/.config/ghostty ~/.config/ghostty.backup
 cd ~/dotfiles && stow */
 ```
 
-4. Restart your terminal or source your shell config
+4. Install TPM (Tmux Plugin Manager) and plugins
+
+```bash
+# Install TPM
+git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+
+# Install tmux plugins
+~/.tmux/plugins/tpm/bin/install_plugins
+```
+
+5. Restart your terminal or source your shell config
 
 ---
 
