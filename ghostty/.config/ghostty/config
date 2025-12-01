@@ -11,7 +11,7 @@ mouse-scroll-multiplier = 2
 background-opacity = 1
 background-blur-radius = 20  
 #background = #000000
-background-image = ~/Desktop/vapor.jpg
+background-image = ~/dotfiles/vapor.jpg
 background-image-opacity = 0.2
 background-image-fit = cover
 
