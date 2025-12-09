@@ -1,0 +1,47 @@
+[user]
+	name = Luke Melnik
+	email = 70446784+lukemelnik@users.noreply.github.com
+
+[init]
+	defaultBranch = main
+
+[color]
+	ui = auto
+
+[core]
+	excludesfile = ~/.config/git/ignore
+	autocrlf = input
+	editor = nvim
+
+[credential]
+	username = lukemelnik
+
+[pull]
+	rebase = true
+
+[diff]
+	algorithm = histogram
+	colorMoved = default
+
+[merge]
+	conflictstyle = zdiff3
+
+[rebase]
+	autoStash = true
+	autoSquash = true
+
+[fetch]
+	prune = true
+
+[push]
+	default = current
+	autoSetupRemote = true
+
+[alias]
+	co = checkout
+	br = branch
+	ci = commit
+	cia = commit -a
+	st = status -s
+	lg = log --oneline --decorate --all --graph
+	conf = config --global --edit
