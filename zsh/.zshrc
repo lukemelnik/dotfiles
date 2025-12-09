@@ -549,6 +549,22 @@ f() {
 # TMUX and keybindings
 # ---------------------------
 bindkey -v
+
+# Fix backspace in vi mode
+bindkey -v '^?' backward-delete-char
+bindkey -v '^h' backward-delete-char
+
+# Fix delete key
+bindkey '^[[3~' delete-char
+
+# Make escape key respond faster (10ms instead of 400ms)
+export KEYTIMEOUT=1
+
+# Allow v to edit command line in vim
+autoload -Uz edit-command-line
+zle -N edit-command-line
+bindkey -M vicmd 'v' edit-command-line
+
 bindkey "^[[A" history-search-backward
 bindkey "^[[B" history-search-forward
 
