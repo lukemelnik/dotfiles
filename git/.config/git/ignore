@@ -26,3 +26,5 @@ Thumbs.db
 
 # OS or Editor files
 .cache/
+
+**/.claude/settings.local.json
